@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.Numerics;
 using System.IO;
 using System.Text;
+using System.Threading.Tasks;
+using System.Diagnostics;
 
 namespace rtxtest
 { 
@@ -51,10 +53,26 @@ namespace rtxtest
     class Program
     {
 
-
+        public Program()
+        {
+            Console.WriteLine("Dick");
+            throw new Exception();
+        }
 
         static void Main(string[] args)
         {
+            Program a = null;
+            try
+            {
+                a = new Program();
+            }
+            catch
+            {
+
+            }
+            Console.WriteLine(a);
+
+
             Render();
             Console.WriteLine("Hello World!");
         }
@@ -74,7 +92,7 @@ namespace rtxtest
             float specularLightLevel = 0;
             foreach(var s in spheres)
             {
-                var e = s.RayIntersected(orig, dir);
+                float? e = s.RayIntersected(orig, dir);
                 if (e != null && dist > e)
                 {
                     dist = e.Value;
@@ -89,6 +107,9 @@ namespace rtxtest
                 foreach(var l in lights)
                 {
                     Vector3 lightdir = Vector3.Normalize( l.position - intersection);
+                    float lightDist = Vector3.Distance(l.position, intersection);
+
+
                     diffuseLightLevel += MathF.Max(0, Vector3.Dot(lightdir, N)) * l.intensity ;
                     specularLightLevel += MathF.Pow(MathF.Max(0f, Vector3.Dot(Reflect(ref lightdir, ref N), dir)), m.specular) * l.intensity;
                 }
@@ -110,21 +131,32 @@ namespace rtxtest
             const int width = 1024;
             const int height = 768;
             const float fov = MathF.PI/2;
-            List<Vector3> framebuffer = new List<Vector3>(width * height);
+            Vector3[] framebuffer = new Vector3[width * height];
 
             Vector3 position = new Vector3(0, 0, 0);
 
-            for (int j= 0; j < height; j++)
-            {
-                for (int i = 0; i < width; i++)
+            long par = 0;
+
+            var sw = new Stopwatch();
+                sw.Start();
+                Parallel.For(0, 8, new Action<int>((kek) =>
                 {
-                    float x =  (2f * ((float)i + 0.5f) / (float)width - 1) * MathF.Tan(fov / 2f) * width / (float)height;
-                    float y = -(2f * ((float)j + 0.5f) / (float)height - 1) * MathF.Tan(fov / 2f);
-                    Vector3 direction = Vector3.Normalize(new Vector3(x, y, -1));
-                    framebuffer.Add(Cast(ref position,ref direction,ref spheres, ref lights));
-                    //framebuffer.Add(new Vector3((float)i / height,(float) j / height, 0));
-                }
-            }
+                    for (int j = kek * height / 8; j < height / 8 * (kek + 1); j++)
+                    {
+                        for (int i = 0; i < width; i++)
+                        {
+                            float x = (2f * ((float)i + 0.5f) / (float)width - 1) * MathF.Tan(fov / 2f) * width / (float)height;
+                            float y = -(2f * ((float)j + 0.5f) / (float)height - 1) * MathF.Tan(fov / 2f);
+                            Vector3 direction = Vector3.Normalize(new Vector3(x, y, -1));
+                            framebuffer[j * width + i] = Cast(ref position, ref direction, ref spheres, ref lights);
+                        }
+                    }
+                }));
+                sw.Stop();
+                par += sw.ElapsedMilliseconds;
+                
+                
+            Console.WriteLine(par + "- par");
 
             FileStream file = new FileStream("out.ppm",FileMode.Create);
             var sr = new StreamWriter(file);
